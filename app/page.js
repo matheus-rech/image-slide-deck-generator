@@ -11,10 +11,8 @@ export default function Home() {
   const [apiCallLogs, setApiCallLogs] = useState([]);
   const [selectedModel, setSelectedModel] = useState("openai");
   const [uploadedImages, setUploadedImages] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [captions, setCaptions] = useState([]);
   const [imageBase64s, setImageBase64s] = useState([]);
-  const [showTextFields, setShowTextFields] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const models = [
     { id: "openai", name: "OpenAI GPT-4 Vision" },
@@ -25,28 +23,10 @@ export default function Home() {
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
-
-    // Create empty messages and captions arrays for each uploaded image
-    const newMessages = Array(files.length).fill("");
-    const newCaptions = Array(files.length).fill("");
     
     // Store uploaded image files
     setUploadedImages(files);
-    setMessages(newMessages);
-    setCaptions(newCaptions);
     setImageBase64s([]); // Reset base64 images
-  };
-
-  const updateMessage = (index, value) => {
-    const newMessages = [...messages];
-    newMessages[index] = value;
-    setMessages(newMessages);
-  };
-
-  const updateCaption = (index, value) => {
-    const newCaptions = [...captions];
-    newCaptions[index] = value;
-    setCaptions(newCaptions);
   };
 
   const generateSlides = async () => {
@@ -56,6 +36,7 @@ export default function Home() {
     setError(null);
     setSlides([]);
     setApiCallLogs([]);
+    setIsAnalyzing(true);
 
     try {
       const base64Images = await Promise.all(
@@ -82,8 +63,6 @@ export default function Home() {
         },
         body: JSON.stringify({ 
           images: base64Images,
-          messages: messages,
-          captions: captions,
           model: selectedModel
         }),
       });
@@ -109,6 +88,7 @@ export default function Home() {
       setApiCallLogs(prev => [...prev, `Error: ${err.message || 'Unknown error'}`]);
     } finally {
       setIsLoading(false);
+      setIsAnalyzing(false);
     }
   };
 
@@ -138,16 +118,6 @@ export default function Home() {
   const getCurrentSlideExplanation = () => {
     if (!slides || !slides[currentSlide]) return "No explanation available";
     return slides[currentSlide].fullExplanation || "No explanation available";
-  };
-
-  const getCurrentSlideMessage = () => {
-    if (!slides || !slides[currentSlide]) return "";
-    return slides[currentSlide].originalMessage || "";
-  };
-
-  const getCurrentSlideCaption = () => {
-    if (!slides || !slides[currentSlide]) return "";
-    return slides[currentSlide].originalCaption || "";
   };
 
   const getCurrentSlideImage = () => {
@@ -204,55 +174,20 @@ export default function Home() {
           <div className="w-full">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold">Image Preview</h2>
-              <button 
-                onClick={() => setShowTextFields(!showTextFields)}
-                className="px-4 py-2 text-sm bg-gray-200 rounded hover:bg-gray-300"
-              >
-                {showTextFields ? "Hide Text Fields" : "Add Message & Caption"}
-              </button>
+              <p className="text-sm text-gray-600">
+                The AI will automatically generate captions and context for each image
+              </p>
             </div>
             
             {uploadedImages.map((file, index) => (
               <div key={index} className="mb-6 p-4 border rounded-lg">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="w-full sm:w-1/3">
-                    <img 
-                      src={URL.createObjectURL(file)} 
-                      alt={`Uploaded image ${index + 1}`}
-                      className="w-full h-auto object-contain rounded-lg"
-                      style={{ maxHeight: '200px' }}
-                    />
-                  </div>
-                  {showTextFields && (
-                    <div className="w-full sm:w-2/3 flex flex-col gap-4">
-                      <div>
-                        <label htmlFor={`message-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
-                          Message
-                        </label>
-                        <textarea
-                          id={`message-${index}`}
-                          value={messages[index]}
-                          onChange={(e) => updateMessage(index, e.target.value)}
-                          placeholder="Add a message related to this image"
-                          className="w-full p-2 border border-gray-300 rounded-md"
-                          rows="2"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor={`caption-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
-                          Caption
-                        </label>
-                        <textarea
-                          id={`caption-${index}`}
-                          value={captions[index]}
-                          onChange={(e) => updateCaption(index, e.target.value)}
-                          placeholder="Add a caption for this image"
-                          className="w-full p-2 border border-gray-300 rounded-md"
-                          rows="2"
-                        />
-                      </div>
-                    </div>
-                  )}
+                <div className="flex justify-center">
+                  <img 
+                    src={URL.createObjectURL(file)} 
+                    alt={`Uploaded image ${index + 1}`}
+                    className="max-w-full h-auto object-contain rounded-lg"
+                    style={{ maxHeight: '300px' }}
+                  />
                 </div>
               </div>
             ))}
@@ -268,10 +203,10 @@ export default function Home() {
           </div>
         )}
 
-        {isLoading && (
+        {isAnalyzing && (
           <div className="w-full text-center p-8">
             <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
-            <p className="mt-4 text-lg">Generating slides with {models.find(m => m.id === selectedModel)?.name}...</p>
+            <p className="mt-4 text-lg">Analyzing images with {models.find(m => m.id === selectedModel)?.name}...</p>
             <p className="text-sm text-gray-500">This may take a few moments</p>
           </div>
         )}
@@ -323,15 +258,10 @@ export default function Home() {
                       <div className="relative rounded-lg overflow-hidden shadow-md transform hover:scale-102 transition-all duration-300 hover:shadow-lg">
                         <img 
                           src={getCurrentSlideImage()}
-                          alt={getCurrentSlideCaption() || getCurrentSlideTitle()}
+                          alt={getCurrentSlideTitle()}
                           className="max-w-full h-auto object-contain"
                           style={{ maxHeight: '400px' }}
                         />
-                        {getCurrentSlideCaption() && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-white text-xs">
-                            <p className="font-medium">{getCurrentSlideCaption()}</p>
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}

@@ -212,6 +212,58 @@ async function analyzeImageWithGemini(base64Image) {
 }
 
 /**
+ * Quickly analyzes an image to generate a brief description (for captions)
+ * @param {string} base64Image - Base64 encoded image
+ * @returns {Promise<string>} - Brief description of the image
+ */
+async function quickAnalyzeImageWithGemini(base64Image) {
+  try {
+    // Initialize Google AI
+    const googleAI = initGoogleAI();
+    
+    // Get the Gemini 2.0 Flash model
+    const model = googleAI.getGenerativeModel({ 
+      model: "gemini-2.0-flash",
+      generationConfig: {
+        temperature: 0.2,
+        topP: 0.8,
+        maxOutputTokens: 50,
+      }
+    });
+    
+    // Extract data and MIME type from data URL
+    const { data, mimeType } = extractBase64FromDataUrl(base64Image);
+    
+    if (!data) {
+      throw new Error("Invalid image data");
+    }
+    
+    // Prepare image part for the prompt
+    const imagePart = {
+      inlineData: {
+        data: data,
+        mimeType: mimeType || "image/jpeg",
+      },
+    };
+    
+    // Create a prompt with text and image
+    const result = await model.generateContent([
+      "Describe this image in a single brief sentence. Keep it under 15 words. No introduction or commentary, just a direct description.",
+      imagePart,
+    ]);
+    
+    // Get the response text
+    const response = await result.response;
+    const responseText = response.text();
+    
+    return responseText;
+  } catch (error) {
+    console.error("Error quickly analyzing image with Gemini:", error);
+    return "interesting image";
+  }
+}
+
+/**
  * Summarizes text into a slide format using Gemini
  * @param {string} text - Text to summarize
  * @param {string} message - Original message associated with the image
@@ -281,5 +333,6 @@ async function summarizeWithGemini(text, message = "", caption = "") {
 module.exports = {
   analyzeImageWithGemini,
   summarizeWithGemini,
-  generateImageTags
+  generateImageTags,
+  quickAnalyzeImageWithGemini
 };

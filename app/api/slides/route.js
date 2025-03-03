@@ -12,92 +12,86 @@ const openai = new OpenAIApi(config);
 
 export async function POST(req) {
   try {
-    const { images, model = "openai", messages = [], captions = [] } = await req.json();
+    const data = await req.json();
     
-    if (!images || !Array.isArray(images) || images.length === 0) {
-      return Response.json({ error: "No images provided" }, { status: 400 });
+    if (!data || !data.images || !Array.isArray(data.images) || data.images.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "No images provided" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
     }
-
-    // Validate model selection
-    const validModels = ["openai", "gemini", "anthropic"];
-    if (!validModels.includes(model)) {
-      return Response.json({ error: `Invalid model selected. Choose from: ${validModels.join(', ')}` }, { status: 400 });
-    }
-
-    console.log(`Using AI model: ${model}`);
+    
+    const images = data.images;
+    const model = data.model || "openai";
+    
     const slides = [];
-
-    // Process each image sequentially
+    
     for (let i = 0; i < images.length; i++) {
-      const base64Image = images[i];
-      const message = messages[i] || ""; // Get message for this image if available
-      const caption = captions[i] || ""; // Get caption for this image if available
+      const image_url = images[i];
       
       try {
-        // Make sure the base64 image is properly formatted
-        const image_url = base64Image.startsWith('data:') 
-          ? base64Image 
-          : `data:image/jpeg;base64,${base64Image}`;
-
+        // Generate a base message and caption using the AI model
+        let base64Image = image_url;
+        if (image_url.startsWith('data:')) {
+          // It's already a base64 string
+          base64Image = image_url;
+        } else {
+          // Convert URL to base64
+          const imageResponse = await fetch(image_url);
+          const blob = await imageResponse.blob();
+          base64Image = await blobToBase64(blob);
+        }
+        
+        // Generate a contextual message and caption for each image
+        const contextInfo = await generateImageContext(base64Image, model);
+        const message = contextInfo.message;
+        const caption = contextInfo.caption;
+        
+        console.log(`Generated message: ${message.substring(0, 50)}...`);
+        console.log(`Generated caption: ${caption.substring(0, 50)}...`);
+        
+        // Step 1: Analyze the image to get full explanation
         let explanation = "";
         let summary = "";
-
-        // Step 1: Generate detailed explanation using selected model
+        let title = "";
+        let content = "";
+        
         if (model === "openai") {
-          explanation = await explainWithOpenAI(image_url);
+          const result = await processImageWithOpenAI(base64Image, message, caption);
+          explanation = result.fullExplanation;
+          summary = result.content;
+          title = result.title;
         } else if (model === "gemini") {
           const result = await processImageWithGemini(base64Image, message, caption);
           explanation = result.fullExplanation;
           summary = result.content;
+          title = result.title;
         } else if (model === "anthropic") {
           explanation = await analyzeImageWithClaude(base64Image);
         }
-
-        // Better error detection - check if explanation starts with 'Error' instead of just containing the word
-        const isExplanationError = explanation.startsWith("Error") || explanation === "No explanation generated";
-        if (isExplanationError) {
-          console.error(`Error generating explanation with ${model}:`, explanation);
-          // Add error slide
-          slides.push({
-            title: "Error Processing Image",
-            content: "There was an error processing this image. Please try again with another image or select a different AI model.",
-            fullExplanation: explanation,
-            originalMessage: message,
-            originalCaption: caption
-          });
-          continue; // Skip to next image
+        
+        if (!explanation) {
+          throw new Error(`Failed to analyze image with ${model}`);
         }
-
-        console.log(`Generated explanation with ${model}:`, explanation.substring(0, 100) + "...");
-
-        // Step 2: Summarize explanation into slide content
-        if (model === "openai") {
-          summary = await summarizeWithOpenAI(explanation, message, caption);
-        } else if (model === "anthropic") {
+        
+        // Step 2: Summarize explanation into slide content if not already done
+        if (model === "anthropic") {
           summary = await summarizeWithClaude(explanation, message, caption);
         }
-
-        // Better error detection for summary
-        const isSummaryError = summary.startsWith("Error");
-        if (isSummaryError) {
-          console.error(`Error generating summary with ${model}:`, summary);
-          // Add error slide but with the explanation
-          slides.push({
-            title: "Error Creating Slide",
-            content: "There was an error creating this slide. Here's the raw explanation instead.",
-            fullExplanation: explanation,
-            originalMessage: message,
-            originalCaption: caption
-          });
-          continue; // Skip to next image
+        
+        if (!summary) {
+          throw new Error(`Failed to summarize explanation with ${model}`);
         }
-
-        console.log(`Generated summary with ${model}:`, summary.substring(0, 100) + "...");
-
-        // Step 3: Extract title and content from the summary
-        const { title, content } = parseSummary(summary);
-
-        // Add the slide
+        
+        // Extract title and content from summary
+        if (!title) {
+          title = extractTitle(summary);
+          content = extractContent(summary);
+        } else {
+          content = summary;
+        }
+        
+        // Add to slides array
         slides.push({
           title,
           content,
@@ -105,29 +99,115 @@ export async function POST(req) {
           originalMessage: message,
           originalCaption: caption
         });
-      } catch (error) {
-        console.error(`Error processing individual image with ${model}:`, error);
         
-        // Add error slide
+      } catch (error) {
+        console.error(`Error processing image ${i}:`, error);
         slides.push({
           title: "Error Processing Image",
-          content: "There was an error processing this image. Please try again with another image or select a different AI model.",
-          fullExplanation: error.message || "Unknown error",
-          originalMessage: message,
-          originalCaption: caption
+          content: `There was an error processing this image: ${error.message}`,
+          fullExplanation: `Error details: ${error.stack || error.message}`,
+          originalMessage: "",
+          originalCaption: ""
         });
       }
     }
-
-    // Return the slides
-    return Response.json({ slides });
+    
+    return new Response(
+      JSON.stringify({ slides }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+    
   } catch (error) {
-    console.error("API error:", error);
-    return Response.json(
-      { error: error.message || "An error occurred processing the images" },
-      { status: 500 }
+    console.error("Server error:", error);
+    return new Response(
+      JSON.stringify({ error: "Server error: " + error.message }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
+}
+
+// Helper function to generate image context (message and caption)
+async function generateImageContext(base64Image, model) {
+  console.log("Generating context for image...");
+  
+  try {
+    // Get a brief description of the image to use for context
+    let description = "";
+    
+    if (model === "openai") {
+      description = await quickDescribeWithOpenAI(base64Image);
+    } else if (model === "gemini") {
+      description = await quickDescribeWithGemini(base64Image);
+    } else if (model === "anthropic") {
+      description = await quickDescribeWithClaude(base64Image);
+    }
+    
+    // Generate message and caption based on the description
+    const message = `Let's explore this ${description.split(' ').slice(0, 5).join(' ')}...`;
+    const caption = description.split('.')[0] + '.';
+    
+    return { message, caption };
+  } catch (error) {
+    console.error("Error generating context:", error);
+    // Return default values if something goes wrong
+    return { 
+      message: "Let's explore this interesting image...", 
+      caption: "An interesting visual" 
+    };
+  }
+}
+
+// Quick image description functions for each model
+async function quickDescribeWithOpenAI(base64Image) {
+  try {
+    const openai = new OpenAIApi(
+      new Configuration({ apiKey: process.env.OPENAI_API_KEY })
+    );
+    
+    const response = await openai.createChatCompletion({
+      model: "gpt-4-vision-preview",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Describe this image briefly in one short sentence." },
+            { type: "image_url", image_url: { url: base64Image } }
+          ]
+        }
+      ],
+      max_tokens: 100
+    });
+    
+    const stream = OpenAIStream(response);
+    const reader = stream.getReader();
+    let result = "";
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      result += new TextDecoder().decode(value);
+    }
+    
+    return result.trim() || "interesting image";
+  } catch (error) {
+    console.error("Error in quickDescribeWithOpenAI:", error);
+    return "interesting image";
+  }
+}
+
+async function quickDescribeWithGemini(base64Image) {
+  try {
+    const description = await geminiUtils.quickAnalyzeImageWithGemini(base64Image);
+    return description.trim() || "interesting image";
+  } catch (error) {
+    console.error("Error in quickDescribeWithGemini:", error);
+    return "interesting image";
+  }
+}
+
+async function quickDescribeWithClaude(base64Image) {
+  // Simplified version of Claude image description
+  return "interesting image"; // Placeholder for Claude implementation
 }
 
 // Helper function for OpenAI image explanation
@@ -313,4 +393,14 @@ async function processImageWithOpenAI(base64Image, message, caption) {
     console.error("Error in OpenAI processing:", error);
     throw error;
   }
+}
+
+// Helper function to convert blob to base64
+async function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
