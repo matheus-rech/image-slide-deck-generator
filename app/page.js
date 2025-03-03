@@ -316,22 +316,48 @@ export default function Home() {
             <div className="p-8">
               <h2 className="text-3xl font-bold mb-6 text-center">{getCurrentSlideTitle()}</h2>
               
-              <div className="flex flex-col md:flex-row gap-8 mb-6">
-                {getCurrentSlideImage() && (
-                  <div className="w-full md:w-1/2 flex justify-center">
-                    <img 
-                      src={getCurrentSlideImage()}
-                      alt={getCurrentSlideCaption() || getCurrentSlideTitle()}
-                      className="max-w-full h-auto object-contain rounded-lg shadow-md"
-                      style={{ maxHeight: '400px' }}
-                    />
+              <div className="slide-container bg-gradient-to-r from-blue-50 to-white rounded-xl shadow-lg overflow-hidden p-6">
+                <div className="flex flex-col md:flex-row gap-8">
+                  {getCurrentSlideImage() && (
+                    <div className="w-full md:w-2/5 flex items-center justify-center transition-all duration-300 ease-in-out">
+                      <div className="relative rounded-lg overflow-hidden shadow-md transform hover:scale-102 transition-all duration-300 hover:shadow-lg">
+                        <img 
+                          src={getCurrentSlideImage()}
+                          alt={getCurrentSlideCaption() || getCurrentSlideTitle()}
+                          className="max-w-full h-auto object-contain"
+                          style={{ maxHeight: '400px' }}
+                        />
+                        {getCurrentSlideCaption() && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-white text-xs">
+                            <p className="font-medium">{getCurrentSlideCaption()}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className={`w-full ${getCurrentSlideImage() ? 'md:w-3/5' : ''} prose max-w-none transition-all duration-300 ease-in-out`}>
+                    <div className="content-container">
+                      {getCurrentSlideContent().split('\n').filter(line => line.trim()).map((line, i) => {
+                        // Check if this is a bullet point
+                        if (line.trim().startsWith('- ') || line.trim().startsWith('* ') || 
+                            /^\d+\./.test(line.trim())) {
+                          return (
+                            <div key={i} className="flex items-start mb-4 slide-in-right animate-fadeIn" style={{animationDelay: `${i * 150}ms`}}>
+                              <span className="text-blue-500 mr-2">•</span>
+                              <p className="m-0">{line.replace(/^[-*]\s+/, '')}</p>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <p key={i} className="mb-4 slide-in-right animate-fadeIn" style={{animationDelay: `${i * 150}ms`}}>
+                              {line}
+                            </p>
+                          );
+                        }
+                      })}
+                    </div>
                   </div>
-                )}
-                
-                <div className={`w-full ${getCurrentSlideImage() ? 'md:w-1/2' : ''} prose`}>
-                  {getCurrentSlideContent().split('\n').filter(line => line.trim()).map((line, i) => (
-                    <p key={i} className="mb-2">{line}</p>
-                  ))}
                 </div>
               </div>
               

@@ -21,3 +21,65 @@ body {
 .prose p {
   margin-bottom: 0.75rem;
 }
+
+/* Animation classes for slide content */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.6s ease-out forwards;
+}
+
+.slide-in-right {
+  animation: slideInRight 0.4s ease-out forwards;
+}
+
+.scale-in {
+  animation: scaleIn 0.5s ease-out forwards;
+}
+
+/* Add smooth transition effects */
+.slide-container {
+  transition: all 0.3s ease-in-out;
+}
+
+.slide-container:hover {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+.content-container p, .content-container div {
+  opacity: 0;
+}
+
+/* Hover animation on image */
+.transform {
+  transition: transform 0.3s ease;
+}
+
+.hover\:scale-102:hover {
+  transform: scale(1.02);
+}
