@@ -1,6 +1,6 @@
 import { Configuration, OpenAIApi } from "openai-edge";
 import { OpenAIStream } from "ai";
-import { analyzeImageWithGemini, summarizeWithGemini } from "../../../utils/gemini";
+import geminiUtils from "../../../utils/gemini"; // Import geminiUtils
 import { analyzeImageWithClaude, summarizeWithClaude } from "../../../utils/anthropic";
 
 export const runtime = "edge";
@@ -46,7 +46,9 @@ export async function POST(req) {
         if (model === "openai") {
           explanation = await explainWithOpenAI(image_url);
         } else if (model === "gemini") {
-          explanation = await analyzeImageWithGemini(base64Image);
+          const result = await processImageWithGemini(base64Image, message, caption);
+          explanation = result.fullExplanation;
+          summary = result.content;
         } else if (model === "anthropic") {
           explanation = await analyzeImageWithClaude(base64Image);
         }
@@ -71,8 +73,6 @@ export async function POST(req) {
         // Step 2: Summarize explanation into slide content
         if (model === "openai") {
           summary = await summarizeWithOpenAI(explanation, message, caption);
-        } else if (model === "gemini") {
-          summary = await summarizeWithGemini(explanation, message, caption);
         } else if (model === "anthropic") {
           summary = await summarizeWithClaude(explanation, message, caption);
         }
@@ -226,4 +226,91 @@ function parseSummary(summary) {
     .trim();
 
   return { title, content };
+}
+
+// Helper function for Gemini image explanation and summarization with fallback to OpenAI
+async function processImageWithGemini(base64Image, message, caption) {
+  console.log("Using AI model: gemini");
+  
+  try {
+    // Generate explanation with Gemini
+    const explanation = await geminiUtils.analyzeImageWithGemini(base64Image);
+    console.log("Generated explanation with gemini:", explanation.substring(0, 100) + "...");
+
+    // Check if there was an error with Gemini
+    if (explanation.startsWith("Error analyzing image with Gemini:")) {
+      console.log("Falling back to OpenAI due to Gemini error");
+      return processImageWithOpenAI(base64Image, message, caption);
+    }
+    
+    // Generate summary with Gemini
+    console.log("Sending text to Gemini for summarization...");
+    const summary = await geminiUtils.summarizeWithGemini(explanation, message, caption);
+    console.log("Received summary from Gemini:", summary.substring(0, 100) + "...");
+    
+    // Check if there was an error with summarization
+    if (summary.startsWith("Error summarizing with Gemini:")) {
+      // Try to summarize with OpenAI instead
+      console.log("Falling back to OpenAI for summarization");
+      const openAiSummary = await summarizeWithOpenAI(explanation, message, caption);
+      return {
+        title: extractTitle(openAiSummary),
+        content: extractContent(openAiSummary),
+        fullExplanation: explanation,
+        originalMessage: message,
+        originalCaption: caption
+      };
+    }
+    
+    return {
+      title: extractTitle(summary),
+      content: extractContent(summary),
+      fullExplanation: explanation,
+      originalMessage: message,
+      originalCaption: caption
+    };
+  } catch (error) {
+    console.error("Error in Gemini processing:", error);
+    console.log("Falling back to OpenAI due to exception");
+    return processImageWithOpenAI(base64Image, message, caption);
+  }
+}
+
+// Helper function to extract title from summary
+function extractTitle(summary) {
+  const titleMatch = summary.match(/^#\s*(.+)$/m);
+  return titleMatch ? titleMatch[1].trim() : "Untitled Slide";
+}
+
+// Helper function to extract content from summary
+function extractContent(summary) {
+  return summary
+    .replace(/^#\s*.+$/m, '')
+    .trim();
+}
+
+// Helper function to process image with OpenAI
+async function processImageWithOpenAI(base64Image, message, caption) {
+  console.log("Using AI model: openai");
+  
+  try {
+    // Generate explanation with OpenAI
+    const explanation = await explainWithOpenAI(base64Image);
+    console.log("Generated explanation with openai:", explanation.substring(0, 100) + "...");
+
+    // Generate summary with OpenAI
+    const summary = await summarizeWithOpenAI(explanation, message, caption);
+    console.log("Received summary from OpenAI:", summary.substring(0, 100) + "...");
+    
+    return {
+      title: extractTitle(summary),
+      content: extractContent(summary),
+      fullExplanation: explanation,
+      originalMessage: message,
+      originalCaption: caption
+    };
+  } catch (error) {
+    console.error("Error in OpenAI processing:", error);
+    throw error;
+  }
 }

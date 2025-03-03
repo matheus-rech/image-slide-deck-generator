@@ -128,65 +128,87 @@ async function generateImageTags(base64Image) {
  * @returns {Promise<string>} - Detailed explanation of the image
  */
 async function analyzeImageWithGemini(base64Image) {
-  try {
-    // Initialize Google AI
-    const googleAI = initGoogleAI();
-    
-    // Get the Gemini 2.0 Flash model with system instruction
-    const model = googleAI.getGenerativeModel({ 
-      model: "gemini-2.0-flash",
-      systemInstruction: "You are an expert image analyst that provides detailed and accurate descriptions of images.",
-      generationConfig: {
-        temperature: 0.4,
-        topP: 0.8,
-        maxOutputTokens: 1000,
+  const MAX_RETRIES = 2;
+  let retryCount = 0;
+  
+  async function attemptAnalysis() {
+    try {
+      // Initialize Google AI
+      const googleAI = initGoogleAI();
+      
+      // Get the Gemini 2.0 Flash model with system instruction
+      const model = googleAI.getGenerativeModel({ 
+        model: "gemini-2.0-flash",
+        systemInstruction: "You are an expert image analyst that provides detailed and accurate descriptions of images.",
+        generationConfig: {
+          temperature: 0.4,
+          topP: 0.8,
+          maxOutputTokens: 1000,
+        }
+      });
+      
+      // Extract data and MIME type from data URL
+      const { data, mimeType } = extractBase64FromDataUrl(base64Image);
+      
+      if (!data) {
+        throw new Error("Invalid image data");
       }
-    });
-    
-    // Extract data and MIME type from data URL
-    const { data, mimeType } = extractBase64FromDataUrl(base64Image);
-    
-    if (!data) {
-      throw new Error("Invalid image data");
-    }
-    
-    // Prepare image part for the prompt
-    const imagePart = {
-      inlineData: {
-        data: data,
-        mimeType: mimeType || "image/jpeg",
-      },
-    };
-    
-    // Create a prompt with text and image
-    console.log("Sending image to Gemini for analysis...");
-    const result = await model.generateContent([
-      "Provide a detailed explanation of what's in this image. Describe the objects, context, colors, and any notable elements in detail. If there's text in the image, include it in your analysis.",
-      imagePart,
-    ]);
-    
-    // Get the response text
-    const response = await result.response;
-    const responseText = response.text();
-    
-    console.log("Received response from Gemini:", responseText.substring(0, 100) + "...");
-    return responseText;
-  } catch (error) {
-    console.error("Error analyzing image with Gemini:", error);
-    
-    // Provide more specific error message based on error type
-    if (error.message.includes("API key")) {
-      return "Error analyzing image with Gemini: Invalid or missing API key. Please check your environment variables.";
-    } else if (error.message.includes("permission") || error.message.includes("access")) {
-      return "Error analyzing image with Gemini: Permission denied. Your API key may not have access to this model.";
-    } else if (error.message.includes("quota") || error.message.includes("limit")) {
-      return "Error analyzing image with Gemini: API quota exceeded. Please try again later.";
-    } else if (error.message.includes("network") || error.message.includes("connect")) {
-      return "Error analyzing image with Gemini: Network error. Please check your internet connection.";
-    } else {
-      return "Error analyzing image with Gemini: " + error.message;
+      
+      // Prepare image part for the prompt
+      const imagePart = {
+        inlineData: {
+          data: data,
+          mimeType: mimeType || "image/jpeg",
+        },
+      };
+      
+      // Create a prompt with text and image
+      console.log("Sending image to Gemini for analysis...");
+      const result = await model.generateContent([
+        "Provide a detailed explanation of what's in this image. Describe the objects, context, colors, and any notable elements in detail. If there's text in the image, include it in your analysis.",
+        imagePart,
+      ]);
+      
+      // Get the response text
+      const response = await result.response;
+      const responseText = response.text();
+      
+      console.log("Received response from Gemini:", responseText.substring(0, 100) + "...");
+      return responseText;
+    } catch (error) {
+      console.error(`Error analyzing image with Gemini (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`, error);
+      
+      // Check if we should retry
+      if (retryCount < MAX_RETRIES && (
+          error.message.includes("fetch failed") || 
+          error.message.includes("network") || 
+          error.message.includes("timeout") ||
+          error.message.includes("ECONNRESET") ||
+          error.message.includes("ETIMEDOUT")
+        )) {
+        retryCount++;
+        console.log(`Retrying Gemini API call (${retryCount}/${MAX_RETRIES})...`);
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        return attemptAnalysis();
+      }
+      
+      // Provide more specific error message based on error type
+      if (error.message.includes("API key")) {
+        return "Error analyzing image with Gemini: Invalid or missing API key. Please check your environment variables.";
+      } else if (error.message.includes("permission") || error.message.includes("access")) {
+        return "Error analyzing image with Gemini: Permission denied. Your API key may not have access to this model.";
+      } else if (error.message.includes("quota") || error.message.includes("limit")) {
+        return "Error analyzing image with Gemini: API quota exceeded. Please try again later.";
+      } else if (error.message.includes("network") || error.message.includes("connect") || error.message.includes("fetch failed")) {
+        return "Error analyzing image with Gemini: Network error. Please check your internet connection or try a different AI model. Error details: " + error.message;
+      } else {
+        return "Error analyzing image with Gemini: " + error.message;
+      }
     }
   }
+  
+  return attemptAnalysis();
 }
 
 /**
