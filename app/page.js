@@ -13,6 +13,8 @@ export default function Home() {
   const [uploadedImages, setUploadedImages] = useState([]);
   const [messages, setMessages] = useState([]);
   const [captions, setCaptions] = useState([]);
+  const [imageBase64s, setImageBase64s] = useState([]);
+  const [showTextFields, setShowTextFields] = useState(false);
 
   const models = [
     { id: "openai", name: "OpenAI GPT-4 Vision" },
@@ -32,6 +34,7 @@ export default function Home() {
     setUploadedImages(files);
     setMessages(newMessages);
     setCaptions(newCaptions);
+    setImageBase64s([]); // Reset base64 images
   };
 
   const updateMessage = (index, value) => {
@@ -65,6 +68,9 @@ export default function Home() {
           });
         })
       );
+
+      // Store base64 images for display in slides
+      setImageBase64s(base64Images);
 
       // Add log entry
       setApiCallLogs(prev => [...prev, `Processing ${base64Images.length} images with ${selectedModel}...`]);
@@ -144,6 +150,11 @@ export default function Home() {
     return slides[currentSlide].originalCaption || "";
   };
 
+  const getCurrentSlideImage = () => {
+    if (!imageBase64s || !imageBase64s[currentSlide]) return null;
+    return imageBase64s[currentSlide];
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-8 bg-gradient-to-b from-blue-100 to-white">
       <div className="z-10 w-full max-w-5xl flex flex-col items-center gap-8">
@@ -191,7 +202,16 @@ export default function Home() {
 
         {uploadedImages.length > 0 && (
           <div className="w-full">
-            <h2 className="text-xl font-semibold mb-4">Add Message and Caption for Each Image</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Image Preview</h2>
+              <button 
+                onClick={() => setShowTextFields(!showTextFields)}
+                className="px-4 py-2 text-sm bg-gray-200 rounded hover:bg-gray-300"
+              >
+                {showTextFields ? "Hide Text Fields" : "Add Message & Caption"}
+              </button>
+            </div>
+            
             {uploadedImages.map((file, index) => (
               <div key={index} className="mb-6 p-4 border rounded-lg">
                 <div className="flex flex-col sm:flex-row gap-4">
@@ -203,34 +223,36 @@ export default function Home() {
                       style={{ maxHeight: '200px' }}
                     />
                   </div>
-                  <div className="w-full sm:w-2/3 flex flex-col gap-4">
-                    <div>
-                      <label htmlFor={`message-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
-                        Message
-                      </label>
-                      <textarea
-                        id={`message-${index}`}
-                        value={messages[index]}
-                        onChange={(e) => updateMessage(index, e.target.value)}
-                        placeholder="Add a message related to this image"
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                        rows="2"
-                      />
+                  {showTextFields && (
+                    <div className="w-full sm:w-2/3 flex flex-col gap-4">
+                      <div>
+                        <label htmlFor={`message-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
+                          Message
+                        </label>
+                        <textarea
+                          id={`message-${index}`}
+                          value={messages[index]}
+                          onChange={(e) => updateMessage(index, e.target.value)}
+                          placeholder="Add a message related to this image"
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          rows="2"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor={`caption-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
+                          Caption
+                        </label>
+                        <textarea
+                          id={`caption-${index}`}
+                          value={captions[index]}
+                          onChange={(e) => updateCaption(index, e.target.value)}
+                          placeholder="Add a caption for this image"
+                          className="w-full p-2 border border-gray-300 rounded-md"
+                          rows="2"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label htmlFor={`caption-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
-                        Caption
-                      </label>
-                      <textarea
-                        id={`caption-${index}`}
-                        value={captions[index]}
-                        onChange={(e) => updateCaption(index, e.target.value)}
-                        placeholder="Add a caption for this image"
-                        className="w-full p-2 border border-gray-300 rounded-md"
-                        rows="2"
-                      />
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -293,28 +315,25 @@ export default function Home() {
             
             <div className="p-8">
               <h2 className="text-3xl font-bold mb-6 text-center">{getCurrentSlideTitle()}</h2>
-              <div className="prose max-w-none">
-                {getCurrentSlideContent().split('\n').filter(line => line.trim()).map((line, i) => (
-                  <p key={i} className="mb-2">{line}</p>
-                ))}
-              </div>
               
-              {(getCurrentSlideMessage() || getCurrentSlideCaption()) && (
-                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                  {getCurrentSlideMessage() && (
-                    <div className="mb-3">
-                      <h4 className="text-md font-semibold text-blue-800">Original Message:</h4>
-                      <p className="text-sm text-gray-700">{getCurrentSlideMessage()}</p>
-                    </div>
-                  )}
-                  {getCurrentSlideCaption() && (
-                    <div>
-                      <h4 className="text-md font-semibold text-blue-800">Original Caption:</h4>
-                      <p className="text-sm text-gray-700">{getCurrentSlideCaption()}</p>
-                    </div>
-                  )}
+              <div className="flex flex-col md:flex-row gap-8 mb-6">
+                {getCurrentSlideImage() && (
+                  <div className="w-full md:w-1/2 flex justify-center">
+                    <img 
+                      src={getCurrentSlideImage()}
+                      alt={getCurrentSlideCaption() || getCurrentSlideTitle()}
+                      className="max-w-full h-auto object-contain rounded-lg shadow-md"
+                      style={{ maxHeight: '400px' }}
+                    />
+                  </div>
+                )}
+                
+                <div className={`w-full ${getCurrentSlideImage() ? 'md:w-1/2' : ''} prose`}>
+                  {getCurrentSlideContent().split('\n').filter(line => line.trim()).map((line, i) => (
+                    <p key={i} className="mb-2">{line}</p>
+                  ))}
                 </div>
-              )}
+              </div>
               
               <div className="mt-8 p-4 bg-gray-50 rounded-lg">
                 <h3 className="text-lg font-medium mb-2">Full Explanation:</h3>
