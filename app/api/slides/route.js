@@ -12,7 +12,7 @@ const openai = new OpenAIApi(config);
 
 export async function POST(req) {
   try {
-    const { images, model = "openai" } = await req.json();
+    const { images, model = "openai", messages = [], captions = [] } = await req.json();
     
     if (!images || !Array.isArray(images) || images.length === 0) {
       return Response.json({ error: "No images provided" }, { status: 400 });
@@ -28,7 +28,11 @@ export async function POST(req) {
     const slides = [];
 
     // Process each image sequentially
-    for (const base64Image of images) {
+    for (let i = 0; i < images.length; i++) {
+      const base64Image = images[i];
+      const message = messages[i] || ""; // Get message for this image if available
+      const caption = captions[i] || ""; // Get caption for this image if available
+      
       try {
         // Make sure the base64 image is properly formatted
         const image_url = base64Image.startsWith('data:') 
@@ -55,7 +59,9 @@ export async function POST(req) {
           slides.push({
             title: "Error Processing Image",
             content: "There was an error processing this image. Please try again with another image or select a different AI model.",
-            fullExplanation: explanation
+            fullExplanation: explanation,
+            originalMessage: message,
+            originalCaption: caption
           });
           continue; // Skip to next image
         }
@@ -64,11 +70,11 @@ export async function POST(req) {
 
         // Step 2: Summarize explanation into slide content
         if (model === "openai") {
-          summary = await summarizeWithOpenAI(explanation);
+          summary = await summarizeWithOpenAI(explanation, message, caption);
         } else if (model === "gemini") {
-          summary = await summarizeWithGemini(explanation);
+          summary = await summarizeWithGemini(explanation, message, caption);
         } else if (model === "anthropic") {
-          summary = await summarizeWithClaude(explanation);
+          summary = await summarizeWithClaude(explanation, message, caption);
         }
 
         // Better error detection for summary
@@ -79,7 +85,9 @@ export async function POST(req) {
           slides.push({
             title: "Error Creating Slide",
             content: "There was an error creating this slide. Here's the raw explanation instead.",
-            fullExplanation: explanation
+            fullExplanation: explanation,
+            originalMessage: message,
+            originalCaption: caption
           });
           continue; // Skip to next image
         }
@@ -94,6 +102,8 @@ export async function POST(req) {
           title,
           content,
           fullExplanation: explanation,
+          originalMessage: message,
+          originalCaption: caption
         });
       } catch (error) {
         console.error(`Error processing individual image with ${model}:`, error);
@@ -102,7 +112,9 @@ export async function POST(req) {
         slides.push({
           title: "Error Processing Image",
           content: "There was an error processing this image. Please try again with another image or select a different AI model.",
-          fullExplanation: error.message || "Unknown error"
+          fullExplanation: error.message || "Unknown error",
+          originalMessage: message,
+          originalCaption: caption
         });
       }
     }
@@ -156,18 +168,28 @@ async function explainWithOpenAI(image_url) {
 }
 
 // Helper function for OpenAI summarization
-async function summarizeWithOpenAI(explanation) {
+async function summarizeWithOpenAI(explanation, message = "", caption = "") {
   try {
     const summaryResponse = await openai.createChatCompletion({
       model: "gpt-4o-mini", // Using gpt-4o-mini for summarization
       messages: [
         {
           role: "system",
-          content: "You are a slide deck assistant. Create a concise slide with a title and bullet points based on the provided text."
+          content: "You are a slide deck assistant. Create concise slides that incorporate all relevant context into the content."
         },
         {
           role: "user",
-          content: `Generate a slide from this explanation. Format your response with a # Title at the top, followed by 3-5 bullet points of content:\n\n${explanation}`
+          content: `Generate a slide from this explanation. Format your response with a # Title at the top, followed by 3-5 bullet points of content.
+
+IMPORTANT: You must directly incorporate the original message and caption into the slide content itself.
+Don't just append them or list them separately - integrate their meaning and context into both the title
+and bullet points as appropriate.
+
+Original Message: ${message}
+Original Caption: ${caption}
+
+Explanation:
+${explanation}`
         },
       ],
       max_tokens: 400

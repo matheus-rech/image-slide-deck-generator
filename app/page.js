@@ -10,6 +10,9 @@ export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [apiCallLogs, setApiCallLogs] = useState([]);
   const [selectedModel, setSelectedModel] = useState("openai");
+  const [uploadedImages, setUploadedImages] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [captions, setCaptions] = useState([]);
 
   const models = [
     { id: "openai", name: "OpenAI GPT-4 Vision" },
@@ -21,6 +24,31 @@ export default function Home() {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
+    // Create empty messages and captions arrays for each uploaded image
+    const newMessages = Array(files.length).fill("");
+    const newCaptions = Array(files.length).fill("");
+    
+    // Store uploaded image files
+    setUploadedImages(files);
+    setMessages(newMessages);
+    setCaptions(newCaptions);
+  };
+
+  const updateMessage = (index, value) => {
+    const newMessages = [...messages];
+    newMessages[index] = value;
+    setMessages(newMessages);
+  };
+
+  const updateCaption = (index, value) => {
+    const newCaptions = [...captions];
+    newCaptions[index] = value;
+    setCaptions(newCaptions);
+  };
+
+  const generateSlides = async () => {
+    if (uploadedImages.length === 0) return;
+
     setIsLoading(true);
     setError(null);
     setSlides([]);
@@ -28,7 +56,7 @@ export default function Home() {
 
     try {
       const base64Images = await Promise.all(
-        files.map(file => {
+        uploadedImages.map(file => {
           return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(reader.result);
@@ -48,6 +76,8 @@ export default function Home() {
         },
         body: JSON.stringify({ 
           images: base64Images,
+          messages: messages,
+          captions: captions,
           model: selectedModel
         }),
       });
@@ -104,6 +134,16 @@ export default function Home() {
     return slides[currentSlide].fullExplanation || "No explanation available";
   };
 
+  const getCurrentSlideMessage = () => {
+    if (!slides || !slides[currentSlide]) return "";
+    return slides[currentSlide].originalMessage || "";
+  };
+
+  const getCurrentSlideCaption = () => {
+    if (!slides || !slides[currentSlide]) return "";
+    return slides[currentSlide].originalCaption || "";
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-8 bg-gradient-to-b from-blue-100 to-white">
       <div className="z-10 w-full max-w-5xl flex flex-col items-center gap-8">
@@ -148,6 +188,63 @@ export default function Home() {
             />
           </label>
         </div>
+
+        {uploadedImages.length > 0 && (
+          <div className="w-full">
+            <h2 className="text-xl font-semibold mb-4">Add Message and Caption for Each Image</h2>
+            {uploadedImages.map((file, index) => (
+              <div key={index} className="mb-6 p-4 border rounded-lg">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="w-full sm:w-1/3">
+                    <img 
+                      src={URL.createObjectURL(file)} 
+                      alt={`Uploaded image ${index + 1}`}
+                      className="w-full h-auto object-contain rounded-lg"
+                      style={{ maxHeight: '200px' }}
+                    />
+                  </div>
+                  <div className="w-full sm:w-2/3 flex flex-col gap-4">
+                    <div>
+                      <label htmlFor={`message-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
+                        Message
+                      </label>
+                      <textarea
+                        id={`message-${index}`}
+                        value={messages[index]}
+                        onChange={(e) => updateMessage(index, e.target.value)}
+                        placeholder="Add a message related to this image"
+                        className="w-full p-2 border border-gray-300 rounded-md"
+                        rows="2"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor={`caption-${index}`} className="block text-sm font-medium text-gray-700 mb-1">
+                        Caption
+                      </label>
+                      <textarea
+                        id={`caption-${index}`}
+                        value={captions[index]}
+                        onChange={(e) => updateCaption(index, e.target.value)}
+                        placeholder="Add a caption for this image"
+                        className="w-full p-2 border border-gray-300 rounded-md"
+                        rows="2"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="text-center mt-4">
+              <button
+                onClick={generateSlides}
+                disabled={isLoading}
+                className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+              >
+                {isLoading ? 'Generating...' : 'Generate Slides'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {isLoading && (
           <div className="w-full text-center p-8">
@@ -201,6 +298,23 @@ export default function Home() {
                   <p key={i} className="mb-2">{line}</p>
                 ))}
               </div>
+              
+              {(getCurrentSlideMessage() || getCurrentSlideCaption()) && (
+                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                  {getCurrentSlideMessage() && (
+                    <div className="mb-3">
+                      <h4 className="text-md font-semibold text-blue-800">Original Message:</h4>
+                      <p className="text-sm text-gray-700">{getCurrentSlideMessage()}</p>
+                    </div>
+                  )}
+                  {getCurrentSlideCaption() && (
+                    <div>
+                      <h4 className="text-md font-semibold text-blue-800">Original Caption:</h4>
+                      <p className="text-sm text-gray-700">{getCurrentSlideCaption()}</p>
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div className="mt-8 p-4 bg-gray-50 rounded-lg">
                 <h3 className="text-lg font-medium mb-2">Full Explanation:</h3>

@@ -22,6 +22,10 @@ async function testAPI() {
     const imageBuffer = await imageResponse.buffer();
     const base64Image = `data:image/jpeg;base64,${imageBuffer.toString('base64')}`;
     
+    // Define test message and caption
+    const testMessage = "This is a test message to include in the slide";
+    const testCaption = "Colorful gradient abstract art";
+    
     console.log('Testing API with OpenAI model...');
     // Test with OpenAI model
     const responseOpenAI = await fetch('http://localhost:3000/api/slides', {
@@ -31,12 +35,16 @@ async function testAPI() {
       },
       body: JSON.stringify({
         images: [base64Image],
+        messages: [testMessage],
+        captions: [testCaption],
         model: 'openai'
       }),
     });
     
     const dataOpenAI = await responseOpenAI.json();
     console.log('OpenAI API Response:', JSON.stringify(dataOpenAI).substring(0, 150) + '...');
+    console.log('Original Message included:', dataOpenAI.slides[0].originalMessage === testMessage);
+    console.log('Original Caption included:', dataOpenAI.slides[0].originalCaption === testCaption);
     
     console.log('\nTesting API with Gemini model...');
     // Test with Gemini model
@@ -47,12 +55,16 @@ async function testAPI() {
       },
       body: JSON.stringify({
         images: [base64Image],
+        messages: [testMessage],
+        captions: [testCaption],
         model: 'gemini'
       }),
     });
     
     const dataGemini = await responseGemini.json();
     console.log('Gemini API Response:', JSON.stringify(dataGemini).substring(0, 150) + '...');
+    console.log('Original Message included:', dataGemini.slides[0].originalMessage === testMessage);
+    console.log('Original Caption included:', dataGemini.slides[0].originalCaption === testCaption);
     
     console.log('\nTesting API with Claude model...');
     // Test with Claude model
@@ -63,12 +75,16 @@ async function testAPI() {
       },
       body: JSON.stringify({
         images: [base64Image],
+        messages: [testMessage],
+        captions: [testCaption],
         model: 'anthropic'
       }),
     });
     
     const dataClaude = await responseClaude.json();
     console.log('Claude API Response:', JSON.stringify(dataClaude).substring(0, 150) + '...');
+    console.log('Original Message included:', dataClaude.slides[0].originalMessage === testMessage);
+    console.log('Original Caption included:', dataClaude.slides[0].originalCaption === testCaption);
     
     console.log('\nAPI test completed. Check the responses above.');
   } catch (error) {

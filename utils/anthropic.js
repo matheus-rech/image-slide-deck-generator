@@ -89,17 +89,27 @@ async function analyzeImageWithClaude(base64Image) {
 /**
  * Summarizes text into a slide format using Claude
  * @param {string} text - Text to summarize
+ * @param {string} message - Original message associated with the image
+ * @param {string} caption - Original caption associated with the image
  * @returns {Promise<string>} - Summarized content in slide format
  */
-async function summarizeWithClaude(text) {
+async function summarizeWithClaude(text, message = "", caption = "") {
   try {
     // Initialize Anthropic client
     const anthropic = initAnthropic();
     
-    // Create prompt for summarization
+    // Create prompt for summarization with integration instructions
     const prompt = `Generate a slide from this explanation. 
-    Format your response with a # Title at the top, followed by 3-5 bullet points of content:
+    Format your response with a # Title at the top, followed by 3-5 bullet points of content.
     
+    IMPORTANT: You must directly incorporate the original message and caption into the slide content itself.
+    Don't just append them or list them separately - integrate their meaning and context into both the title
+    and bullet points as appropriate.
+    
+    Original Message: ${message}
+    Original Caption: ${caption}
+    
+    Explanation:
     ${text}`;
     
     // Make request to Claude
