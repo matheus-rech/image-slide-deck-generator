@@ -12,8 +12,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.17.2",
     "@google/generative-ai": "^0.2.1",
-    "ai": "^2.2.31",
-    "next": "14.0.4",
+    "ai": "^4.1.50",
+    "next": "14.2.21",
     "openai-edge": "^1.2.2",
     "react": "^18",
     "react-dom": "^18"
