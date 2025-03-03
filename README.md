@@ -7,6 +7,7 @@ This application uses AI to analyze images and automatically generate slide deck
 - Upload multiple images
 - Generate detailed explanations for each image using AI vision capabilities
 - Summarize explanations into concise slides with titles and bullet points
+- Add custom messages and captions for each image that get incorporated into the slide content
 - Navigate through generated slides
 - Choose between OpenAI, Google Gemini, or Anthropic Claude models for image analysis
 - Improved error handling for all AI models
@@ -69,9 +70,13 @@ yarn dev
 
 1. Select which AI model you want to use from the dropdown menu
 2. Click on the upload area or drag and drop images
-3. Wait for the AI to process the images and generate slides
-4. Navigate through the slides using the Previous and Next buttons
-5. View the detailed explanation for each slide if needed
+3. Add optional messages and captions for each image
+   - Messages can provide context about the image
+   - Captions can describe or label the image
+4. Click "Generate Slides"
+5. Wait for the AI to process the images and generate slides
+6. Navigate through the slides using the Previous and Next buttons
+7. View the detailed explanation for each slide if needed
 
 ## Getting API Keys
 
@@ -98,18 +103,20 @@ yarn dev
 ## How It Works
 
 1. Images are encoded as base64 and sent to the API
-2. The selected AI model generates detailed explanations for each image:
+2. Any provided messages and captions are included with the images
+3. The selected AI model generates detailed explanations for each image:
    - OpenAI uses GPT-4o
    - Google uses Gemini 2.0 Flash
    - Anthropic uses Claude 3 Opus
-3. The explanations are then summarized into slide titles and content:
+4. The explanations, along with any messages and captions, are then summarized into slide titles and content:
    - OpenAI uses GPT-4o-mini
    - Google uses Gemini 2.0 Flash
    - Anthropic uses Claude 3 Haiku
-4. The UI displays the generated slides with navigation controls
+5. The UI displays the generated slides with navigation controls
 
 ## Recent Updates
 
+- Added support for custom messages and captions that get directly incorporated into the slide content
 - Updated OpenAI model from deprecated GPT-4-vision-preview to GPT-4o
 - Improved image format handling for all AI models
 - Enhanced error handling and graceful degradation for API errors
