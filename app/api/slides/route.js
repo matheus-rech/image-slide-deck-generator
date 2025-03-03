@@ -46,6 +46,7 @@ export async function POST(req) {
         const contextInfo = await generateImageContext(base64Image, model);
         const message = contextInfo.message;
         const caption = contextInfo.caption;
+        const description = contextInfo.description;
         
         console.log(`Generated message: ${message.substring(0, 50)}...`);
         console.log(`Generated caption: ${caption.substring(0, 50)}...`);
@@ -142,17 +143,22 @@ async function generateImageContext(base64Image, model) {
       description = await quickDescribeWithClaude(base64Image);
     }
     
-    // Generate message and caption based on the description
-    const message = `Let's explore this ${description.split(' ').slice(0, 5).join(' ')}...`;
+    // Generate a more interesting message and caption based on the description
+    const message = `Let's explore the details and significance of this ${description.split(' ').slice(0, 5).join(' ')}...`;
     const caption = description.split('.')[0] + '.';
     
-    return { message, caption };
+    return { 
+      message, 
+      caption,
+      description 
+    };
   } catch (error) {
     console.error("Error generating context:", error);
     // Return default values if something goes wrong
     return { 
-      message: "Let's explore this interesting image...", 
-      caption: "An interesting visual" 
+      message: "Let's explore the details and significance of this interesting image...", 
+      caption: "An interesting visual",
+      description: "interesting visual content" 
     };
   }
 }
@@ -170,12 +176,12 @@ async function quickDescribeWithOpenAI(base64Image) {
         {
           role: "user",
           content: [
-            { type: "text", text: "Describe this image briefly in one short sentence." },
+            { type: "text", text: "Describe this image in a detailed sentence. Focus on what makes it interesting or noteworthy." },
             { type: "image_url", image_url: { url: base64Image } }
           ]
         }
       ],
-      max_tokens: 100
+      max_tokens: 150
     });
     
     const stream = OpenAIStream(response);
@@ -248,50 +254,95 @@ async function explainWithOpenAI(image_url) {
 }
 
 // Helper function for OpenAI summarization
-async function summarizeWithOpenAI(explanation, message = "", caption = "") {
+async function summarizeWithOpenAI(explanation, message, caption) {
   try {
-    const summaryResponse = await openai.createChatCompletion({
-      model: "gpt-4o-mini", // Using gpt-4o-mini for summarization
+    const openai = new OpenAIApi(
+      new Configuration({ apiKey: process.env.OPENAI_API_KEY })
+    );
+    
+    const content = `
+Image Explanation: ${explanation}
+Context: ${message}
+Caption: ${caption}
+
+Create a slide based on this image analysis. Format as follows:
+# Title That Captures Main Theme
+
+Then create 3-5 bullet points or short paragraphs that highlight the key aspects of the image. Be informative, engaging and educational. Include interesting facts or observations where possible.
+
+The content should be comprehensive enough to stand on its own even if someone couldn't see the image.
+`;
+    
+    const response = await openai.createChatCompletion({
+      model: "gpt-4-turbo",
       messages: [
-        {
-          role: "system",
-          content: "You are a slide deck assistant. Create concise slides that incorporate all relevant context into the content."
-        },
-        {
-          role: "user",
-          content: `Generate a slide from this explanation. Format your response with a # Title at the top, followed by 3-5 bullet points of content.
-
-IMPORTANT: You must directly incorporate the original message and caption into the slide content itself.
-Don't just append them or list them separately - integrate their meaning and context into both the title
-and bullet points as appropriate.
-
-Original Message: ${message}
-Original Caption: ${caption}
-
-Explanation:
-${explanation}`
-        },
+        { role: "system", content: "You are an expert at creating engaging presentation slides from image analyses." },
+        { role: "user", content }
       ],
-      max_tokens: 400
+      max_tokens: 500,
     });
-
-    // Extract the summary from the response with safer accessing
-    const summaryData = await summaryResponse.json();
     
-    // Log the complete response for debugging
-    console.log("OpenAI Summary API response:", JSON.stringify(summaryData));
+    const stream = OpenAIStream(response);
+    const reader = stream.getReader();
+    let result = "";
     
-    // Safer property access
-    return summaryData && 
-           summaryData.choices && 
-           summaryData.choices.length > 0 && 
-           summaryData.choices[0].message && 
-           summaryData.choices[0].message.content 
-      ? summaryData.choices[0].message.content 
-      : "No summary generated";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      result += new TextDecoder().decode(value);
+    }
+    
+    return result;
   } catch (error) {
-    console.error("Error in summarizeWithOpenAI:", error);
-    throw error;
+    console.error("Error summarizing with OpenAI:", error);
+    // Return a more user-friendly error message
+    return `# Analysis of the Image\n\nThis image appears to show ${caption || "interesting content"}.\n\n- The image contains details that would be analyzed further with a working connection to OpenAI.\n- Unfortunately, there was an error connecting to the AI service.\n- Try again or select a different AI model.\n\nError details: ${error.message}`;
+  }
+}
+
+// Helper function for Gemini summarization
+async function summarizeWithGemini(explanation, message, caption) {
+  try {
+    // Using the Gemini model to generate a summary
+    const googleAI = initGoogleAI();
+    
+    const model = googleAI.getGenerativeModel({ 
+      model: "gemini-2.0-flash",
+      systemInstruction: "You are an expert at creating engaging presentation slides from image analyses.",
+      generationConfig: {
+        temperature: 0.4,
+        topP: 0.8,
+        maxOutputTokens: 800,
+      }
+    });
+    
+    const prompt = `
+Image Explanation: ${explanation}
+Context: ${message}
+Caption: ${caption}
+
+Create a slide based on this image analysis. Format as follows:
+# Title That Captures Main Theme
+
+Then create 3-5 bullet points or short paragraphs that highlight the key aspects of the image. Be informative, engaging and educational. Include interesting facts or observations where possible.
+
+The content should be comprehensive enough to stand on its own even if someone couldn't see the image.
+`;
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const summary = response.text();
+    
+    // If summary is too short, it might be an error or low-quality response
+    if (summary.length < 50) {
+      console.log("Gemini returned a very short summary, might be low quality:", summary);
+      return `# Analysis of the Image\n\nThis image appears to show ${caption || "interesting content"}.\n\n- The image contains elements that would be explained in more detail with proper AI analysis.\n- Unfortunately, the AI generated a limited response.\n- The image appears to be a ${caption || "visual that requires further analysis"}.\n\nTry selecting a different AI model for better results.`;
+    }
+    
+    return summary;
+  } catch (error) {
+    console.error("Error summarizing with Gemini:", error);
+    return `# Analysis of the Image\n\nThis image appears to show ${caption || "interesting content"}.\n\n- The image contains elements that would be analyzed with a working connection to Gemini.\n- Unfortunately, there was an error connecting to the AI service.\n- Try again or select a different AI model.\n\nError details: ${error.message}`;
   }
 }
 
@@ -325,7 +376,7 @@ async function processImageWithGemini(base64Image, message, caption) {
     
     // Generate summary with Gemini
     console.log("Sending text to Gemini for summarization...");
-    const summary = await geminiUtils.summarizeWithGemini(explanation, message, caption);
+    const summary = await summarizeWithGemini(explanation, message, caption);
     console.log("Received summary from Gemini:", summary.substring(0, 100) + "...");
     
     // Check if there was an error with summarization

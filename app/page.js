@@ -268,24 +268,30 @@ export default function Home() {
                   
                   <div className={`w-full ${getCurrentSlideImage() ? 'md:w-3/5' : ''} prose max-w-none transition-all duration-300 ease-in-out`}>
                     <div className="content-container">
-                      {getCurrentSlideContent().split('\n').filter(line => line.trim()).map((line, i) => {
-                        // Check if this is a bullet point
-                        if (line.trim().startsWith('- ') || line.trim().startsWith('* ') || 
-                            /^\d+\./.test(line.trim())) {
-                          return (
-                            <div key={i} className="flex items-start mb-4 slide-in-right animate-fadeIn" style={{animationDelay: `${i * 150}ms`}}>
-                              <span className="text-blue-500 mr-2">•</span>
-                              <p className="m-0">{line.replace(/^[-*]\s+/, '')}</p>
-                            </div>
-                          );
-                        } else {
-                          return (
-                            <p key={i} className="mb-4 slide-in-right animate-fadeIn" style={{animationDelay: `${i * 150}ms`}}>
-                              {line}
-                            </p>
-                          );
-                        }
-                      })}
+                      {getCurrentSlideContent() ? (
+                        getCurrentSlideContent().split('\n').filter(line => line.trim()).map((line, i) => {
+                          // Check if this is a bullet point
+                          if (line.trim().startsWith('- ') || line.trim().startsWith('* ') || 
+                              /^\d+\./.test(line.trim())) {
+                            return (
+                              <div key={i} className="flex items-start mb-4 slide-in-right animate-fadeIn" style={{animationDelay: `${i * 150}ms`}}>
+                                <span className="text-blue-500 mr-2">•</span>
+                                <p className="m-0">{line.replace(/^[-*]\s+/, '')}</p>
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <p key={i} className="mb-4 slide-in-right animate-fadeIn" style={{animationDelay: `${i * 150}ms`}}>
+                                {line}
+                              </p>
+                            );
+                          }
+                        })
+                      ) : (
+                        <div className="flex items-center justify-center h-32">
+                          <p className="text-gray-500 italic">Loading slide content...</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

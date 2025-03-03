@@ -162,8 +162,9 @@ async function analyzeImageWithGemini(base64Image) {
         },
       };
       
-      // Create a prompt with text and image
       console.log("Sending image to Gemini for analysis...");
+      
+      // Create a prompt with text and image
       const result = await model.generateContent([
         "Provide a detailed explanation of what's in this image. Describe the objects, context, colors, and any notable elements in detail. If there's text in the image, include it in your analysis.",
         imagePart,
@@ -265,68 +266,53 @@ async function quickAnalyzeImageWithGemini(base64Image) {
 
 /**
  * Summarizes text into a slide format using Gemini
- * @param {string} text - Text to summarize
+ * @param {string} explanation - Text to summarize
  * @param {string} message - Original message associated with the image
- * @param {string} caption - Original caption associated with the image
- * @returns {Promise<string>} - Summarized content in slide format
+ * @param {string} caption - Original caption for the image
+ * @returns {Promise<string>} - Slide summary with title and bullet points
  */
-async function summarizeWithGemini(text, message = "", caption = "") {
+async function summarizeWithGemini(explanation, message, caption) {
   try {
-    // Initialize Google AI
+    // Using the Gemini model to generate a summary
     const googleAI = initGoogleAI();
     
-    // Get the Gemini 2.0 Flash model with system instruction
     const model = googleAI.getGenerativeModel({ 
       model: "gemini-2.0-flash",
-      systemInstruction: "You are an expert at creating informative slides that incorporate all relevant context.",
+      systemInstruction: "You are an expert at creating engaging presentation slides from image analyses.",
       generationConfig: {
-        temperature: 0.2,
-        topP: 0.95,
-        maxOutputTokens: 500,
+        temperature: 0.4,
+        topP: 0.8,
+        maxOutputTokens: 800,
       }
     });
     
-    // Create a prompt with specific instructions for formatting
-    const prompt = `Generate a slide from this explanation. 
-    Format your response with a # Title at the top, followed by 3-5 bullet points of content.
+    const prompt = `
+Image Explanation: ${explanation}
+Context: ${message}
+Caption: ${caption}
+
+Create a slide based on this image analysis. Format as follows:
+# Title That Captures Main Theme
+
+Then create 3-5 bullet points or short paragraphs that highlight the key aspects of the image. Be informative, engaging and educational. Include interesting facts or observations where possible.
+
+The content should be comprehensive enough to stand on its own even if someone couldn't see the image.
+`;
     
-    Make the title concise but descriptive, and keep bullet points brief but informative.
-    
-    IMPORTANT: You must directly incorporate the original message and caption into the slide content itself.
-    Don't just append them or list them separately - integrate their meaning and context into both the title
-    and bullet points as appropriate.
-    
-    Original Message: ${message}
-    Original Caption: ${caption}
-    
-    Explanation:
-    ${text}`;
-    
-    // Generate content
-    console.log("Sending text to Gemini for summarization...");
     const result = await model.generateContent(prompt);
-    
-    // Get the response text
     const response = await result.response;
-    const responseText = response.text();
+    const summary = response.text();
     
-    console.log("Received summary from Gemini:", responseText.substring(0, 100) + "...");
-    return responseText;
+    // If summary is too short, it might be an error or low-quality response
+    if (summary.length < 50) {
+      console.log("Gemini returned a very short summary, might be low quality:", summary);
+      return `# Analysis of the Image\n\nThis image appears to show ${caption || "interesting content"}.\n\n- The image contains elements that would be explained in more detail with proper AI analysis.\n- Unfortunately, the AI generated a limited response.\n- The image appears to be a ${caption || "visual that requires further analysis"}.\n\nTry selecting a different AI model for better results.`;
+    }
+    
+    return summary;
   } catch (error) {
     console.error("Error summarizing with Gemini:", error);
-    
-    // Provide more specific error message based on error type
-    if (error.message.includes("API key")) {
-      return "Error summarizing with Gemini: Invalid or missing API key. Please check your environment variables.";
-    } else if (error.message.includes("permission") || error.message.includes("access")) {
-      return "Error summarizing with Gemini: Permission denied. Your API key may not have access to this model.";
-    } else if (error.message.includes("quota") || error.message.includes("limit")) {
-      return "Error summarizing with Gemini: API quota exceeded. Please try again later.";
-    } else if (error.message.includes("network") || error.message.includes("connect")) {
-      return "Error summarizing with Gemini: Network error. Please check your internet connection.";
-    } else {
-      return "Error summarizing with Gemini: " + error.message;
-    }
+    return `# Analysis of the Image\n\nThis image appears to show ${caption || "interesting content"}.\n\n- The image contains elements that would be analyzed with a working connection to Gemini.\n- Unfortunately, there was an error connecting to the AI service.\n- Try again or select a different AI model.\n\nError details: ${error.message}`;
   }
 }
 
